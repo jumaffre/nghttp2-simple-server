@@ -25,9 +25,7 @@
 constexpr size_t port = 8080;
 
 struct http2_stream_data {
-  // http2_stream_data stream;
   int32_t stream_id;
-  // int fd;
 
   http2_stream_data(int32_t stream_id) : stream_id(stream_id) {}
 };
@@ -49,9 +47,6 @@ static ssize_t read_callback(nghttp2_session *session, int32_t stream_id,
 
   std::cout << "size: " << resp.size() << std::endl;
 
-  // auto data = (uint8_t *)source->ptr;
-  // std::cout << "data: " << std::string(data, data + 11) << std::endl; //
-  // TODO: Garbage!
   memcpy(buf, resp.data(), resp.size());
   *data_flags |= NGHTTP2_DATA_FLAG_EOF;
   return resp.size();
@@ -140,7 +135,6 @@ static int on_header_callback(nghttp2_session *session,
                               size_t namelen, const uint8_t *value,
                               size_t valuelen, uint8_t flags, void *user_data) {
   http2_stream_data *stream_data;
-  const char PATH[] = ":path";
   switch (frame->hd.type) {
   case NGHTTP2_HEADERS:
     if (frame->headers.cat != NGHTTP2_HCAT_REQUEST) {
@@ -250,8 +244,6 @@ int main(int argc, char **argv) {
   struct sockaddr_in address;
   int opt = 1;
   int addrlen = sizeof(address);
-
-  std::string hello = "Hello from server";
 
   // Creating socket file descriptor
   if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
