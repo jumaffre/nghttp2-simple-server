@@ -146,7 +146,8 @@ static int on_header_callback(nghttp2_session *session,
       break;
     }
     auto hdr = std::string(name, name + namelen);
-    std::cout << "Header: " << hdr << std::endl;
+    std::cout << "Header: " << hdr << ": "
+              << std::string(value, value + valuelen) << std::endl;
     break;
   }
   return 0;
@@ -268,22 +269,25 @@ int main(int argc, char **argv) {
 
   std::cout << "listening on port " << port << "..." << std::endl;
 
-  if ((new_socket = accept(server_fd, (struct sockaddr *)&address,
-                           (socklen_t *)&addrlen)) < 0) {
-    perror("accept");
-    exit(EXIT_FAILURE);
-  }
-
-  auto session = std::make_unique<http2_session_data>(new_socket);
-  initialize_nghttp2_session(session);
-
-  std::cout << "http2 session initialised" << std::endl;
-
-  send_server_connection_header(session);
-
   while (true) {
-    if (session_recv(session) == 0) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+    if ((new_socket = accept(server_fd, (struct sockaddr *)&address,
+                             (socklen_t *)&addrlen)) < 0) {
+      perror("accept");
+      exit(EXIT_FAILURE);
+    }
+
+    auto session = std::make_unique<http2_session_data>(new_socket);
+    initialize_nghttp2_session(session);
+
+    std::cout << "http2 session initialised" << std::endl;
+
+    send_server_connection_header(session);
+
+    while (true) {
+      if (session_recv(session) == 0) {
+        break;
+      }
     }
   }
 
