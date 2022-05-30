@@ -49,7 +49,7 @@ static ssize_t send_callback(nghttp2_session *session, const uint8_t *data,
 
 static int on_frame_recv_callback(nghttp2_session *session,
                                   const nghttp2_frame *frame, void *user_data) {
-  std::cout << "on_frame_recv_callback" << std::endl;
+  std::cout << "on_frame_recv_callback: " << (int)frame->hd.type << std::endl;
   http2_session_data *session_data = (http2_session_data *)user_data;
   switch (frame->hd.type) {
   case NGHTTP2_HEADERS:
@@ -193,17 +193,37 @@ session_recv(const std::unique_ptr<http2_session_data> &session_data) {
   return datalen;
 }
 
+static ssize_t read_callback_client(nghttp2_session *session, int32_t stream_id,
+                                    uint8_t *buf, size_t length,
+                                    uint32_t *data_flags,
+                                    nghttp2_data_source *source,
+                                    void *user_data) {
+  std::cout << "read_callback client: " << length << std::endl;
+
+  std::string req = "Hello from client";
+  std::cout << "size: " << req.size() << std::endl;
+
+  memcpy(buf, req.data(), req.size());
+  *data_flags |= NGHTTP2_DATA_FLAG_EOF;
+
+  return req.size();
+}
+
 static void
 submit_request(const std::unique_ptr<http2_session_data> &session_data) {
-  nghttp2_nv hdrs[] = {MAKE_NV(":method", "GET"), MAKE_NV(":scheme", "http"),
+  nghttp2_nv hdrs[] = {MAKE_NV(":method", "POST"), MAKE_NV(":scheme", "http"),
                        MAKE_NV(":authority", "localhost:8080"),
                        MAKE_NV(":path", "/")};
 
   auto stream_data = std::make_shared<http2_stream_data>(0);
   session_data->streams.push_back(stream_data);
+
+  nghttp2_data_provider prov;
+  prov.read_callback = read_callback_client;
+
   auto stream_id =
       nghttp2_submit_request(session_data->session, nullptr, hdrs, ARRLEN(hdrs),
-                             NULL, stream_data.get());
+                             &prov, stream_data.get());
   if (stream_id < 0) {
     std::cout << "Could not submit HTTP request: "
               << nghttp2_strerror(stream_id) << std::endl;

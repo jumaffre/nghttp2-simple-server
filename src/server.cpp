@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <thread>
 #include <unistd.h>
+#include <vector>
 
 #include <list>
 #include <memory>
@@ -26,6 +27,7 @@ constexpr size_t port = 8080;
 
 struct http2_stream_data {
   int32_t stream_id;
+  std::vector<uint8_t> request_body;
 
   http2_stream_data(int32_t stream_id) : stream_id(stream_id) {}
 };
@@ -43,13 +45,15 @@ static ssize_t read_callback(nghttp2_session *session, int32_t stream_id,
                              nghttp2_data_source *source, void *user_data) {
   std::cout << "read cb - len: " << length << std::endl;
 
-  std::string resp = "Hello there";
+  auto *stream_data = (http2_stream_data *)nghttp2_session_get_stream_user_data(
+      session, stream_id);
+  auto &request_body = stream_data->request_body;
 
-  std::cout << "size: " << resp.size() << std::endl;
+  // Echo server
 
-  memcpy(buf, resp.data(), resp.size());
+  memcpy(buf, request_body.data(), request_body.size());
   *data_flags |= NGHTTP2_DATA_FLAG_EOF;
-  return resp.size();
+  return request_body.size();
 }
 
 static int on_request_recv(nghttp2_session *session,
@@ -90,7 +94,7 @@ static int on_frame_recv_callback(nghttp2_session *session,
   http2_session_data *session_data = (http2_session_data *)user_data;
   http2_stream_data *stream_data;
 
-  std::cout << "frame recv callback: " << frame->hd.type << std::endl;
+  std::cout << "frame recv callback: " << (int)frame->hd.type << std::endl;
 
   switch (frame->hd.type) {
   case NGHTTP2_DATA:
@@ -171,6 +175,25 @@ static int on_begin_headers_callback(nghttp2_session *session,
   return 0;
 }
 
+static int on_data_callback(nghttp2_session *session, uint8_t flags,
+                            int32_t stream_id, const uint8_t *data, size_t len,
+                            void *user_data) {
+  std::cout << "on_data_callback: " << len << std::endl;
+
+  auto *stream_data = (http2_stream_data *)nghttp2_session_get_stream_user_data(
+      session, stream_id);
+
+  stream_data->request_body.insert(stream_data->request_body.end(), data,
+                                   data + len);
+
+  std::cout << "Request: "
+            << std::string(stream_data->request_body.begin(),
+                           stream_data->request_body.end())
+            << std::endl;
+
+  return 0;
+}
+
 static void initialize_nghttp2_session(
     const std::unique_ptr<http2_session_data> &session_data) {
   nghttp2_session_callbacks *callbacks;
@@ -187,6 +210,9 @@ static void initialize_nghttp2_session(
 
   nghttp2_session_callbacks_set_on_header_callback(callbacks,
                                                    on_header_callback);
+
+  nghttp2_session_callbacks_set_on_data_chunk_recv_callback(callbacks,
+                                                            on_data_callback);
 
   nghttp2_session_callbacks_set_on_stream_close_callback(
       callbacks, on_stream_close_callback);
